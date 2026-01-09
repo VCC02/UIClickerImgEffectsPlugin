@@ -1,0 +1,231 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CONFIG>
+  <ProjectSession>
+    <PathDelim Value="\"/>
+    <Version Value="12"/>
+    <BuildModes Active="Default"/>
+    <Units>
+      <Unit>
+        <Filename Value="UIClickerImgEffects.ppr"/>
+        <FRMtype Value="0"/>
+        <IsPartOfProject Value="True"/>
+        <IsVisibleTab Value="True"/>
+        <EditorIndex Value="0"/>
+        <WindowIndex Value="0"/>
+        <TopLine Value="13"/>
+        <CursorPos X="80" Y="28"/>
+        <UsageCount Value="47"/>
+        <Loaded Value="True"/>
+      </Unit>
+      <Unit>
+        <Filename Value="ImgEffectsDM.pas"/>
+        <FRMtype Value="300"/>
+        <IsPartOfProject Value="True"/>
+        <ComponentName Value="dmProperties"/>
+        <HasResources Value="True"/>
+        <ResourceBaseClass Value="DataModule"/>
+        <EditorIndex Value="2"/>
+        <WindowIndex Value="0"/>
+        <CursorPos X="31" Y="2"/>
+        <UsageCount Value="47"/>
+        <Loaded Value="True"/>
+        <LoadedDesigner Value="True"/>
+      </Unit>
+      <Unit>
+        <Filename Value="..\UIClicker\ClickerUtils\ClickerUtils.pas"/>
+        <IsPartOfProject Value="True"/>
+        <EditorIndex Value="0"/>
+        <WindowIndex Value="0"/>
+        <UsageCount Value="27"/>
+      </Unit>
+      <Unit>
+        <Filename Value="..\UIClicker\ClickerClient\DllUtils.pas"/>
+        <IsPartOfProject Value="True"/>
+        <EditorIndex Value="0"/>
+        <WindowIndex Value="0"/>
+        <UsageCount Value="27"/>
+      </Unit>
+      <Unit>
+        <Filename Value="..\UIClicker\ClickerUtils\ClickerActionPlugins.pas"/>
+        <IsPartOfProject Value="True"/>
+        <EditorIndex Value="0"/>
+        <WindowIndex Value="0"/>
+        <UsageCount Value="27"/>
+      </Unit>
+      <Unit>
+        <Filename Value="ImgEffectsPluginProperties.pas"/>
+        <IsPartOfProject Value="True"/>
+        <EditorIndex Value="1"/>
+        <WindowIndex Value="0"/>
+        <CursorPos X="39" Y="4"/>
+        <UsageCount Value="47"/>
+        <Loaded Value="True"/>
+      </Unit>
+      <Unit>
+        <Filename Value="..\UIClicker\BitmapConv.pas"/>
+        <IsPartOfProject Value="True"/>
+        <EditorIndex Value="-1"/>
+        <WindowIndex Value="-1"/>
+        <TopLine Value="-1"/>
+        <CursorPos X="-1" Y="-1"/>
+        <UsageCount Value="27"/>
+      </Unit>
+      <Unit>
+        <Filename Value="..\UIClicker\BitmapProcessing.pas"/>
+        <IsPartOfProject Value="True"/>
+        <EditorIndex Value="3"/>
+        <WindowIndex Value="0"/>
+        <TopLine Value="100"/>
+        <CursorPos X="38" Y="128"/>
+        <UsageCount Value="27"/>
+        <Loaded Value="True"/>
+      </Unit>
+      <Unit>
+        <Filename Value="..\MiscUtils\CLHeaders.pas"/>
+        <IsPartOfProject Value="True"/>
+        <EditorIndex Value="-1"/>
+        <WindowIndex Value="-1"/>
+        <TopLine Value="-1"/>
+        <CursorPos X="-1" Y="-1"/>
+        <UsageCount Value="27"/>
+      </Unit>
+    </Units>
+    <JumpHistory HistoryIndex="29">
+      <Position>
+        <Filename Value="UIClickerImgEffects.ppr"/>
+        <Caret Line="395" Column="54" TopLine="375"/>
+      </Position>
+      <Position>
+        <Filename Value="UIClickerImgEffects.ppr"/>
+        <Caret Line="394" Column="51" TopLine="382"/>
+      </Position>
+      <Position>
+        <Filename Value="UIClickerImgEffects.ppr"/>
+        <Caret Line="375" Column="36" TopLine="370"/>
+      </Position>
+      <Position>
+        <Filename Value="UIClickerImgEffects.ppr"/>
+        <Caret Line="365" Column="40" TopLine="344"/>
+      </Position>
+      <Position>
+        <Filename Value="UIClickerImgEffects.ppr"/>
+        <Caret Line="391" Column="63" TopLine="383"/>
+      </Position>
+      <Position>
+        <Filename Value="ImgEffectsPluginProperties.pas"/>
+        <Caret Line="115" Column="40" TopLine="98"/>
+      </Position>
+      <Position>
+        <Filename Value="ImgEffectsPluginProperties.pas"/>
+        <Caret Line="107" Column="36" TopLine="94"/>
+      </Position>
+      <Position>
+        <Filename Value="ImgEffectsPluginProperties.pas"/>
+        <Caret Line="108" Column="33" TopLine="94"/>
+      </Position>
+      <Position>
+        <Filename Value="ImgEffectsPluginProperties.pas"/>
+        <Caret Line="115" Column="20" TopLine="101"/>
+      </Position>
+      <Position>
+        <Filename Value="UIClickerImgEffects.ppr"/>
+        <Caret Line="398" Column="59" TopLine="393"/>
+      </Position>
+      <Position>
+        <Filename Value="ImgEffectsPluginProperties.pas"/>
+        <Caret Line="46" Column="3" TopLine="33"/>
+      </Position>
+      <Position>
+        <Filename Value="UIClickerImgEffects.ppr"/>
+        <Caret Line="411" Column="52" TopLine="396"/>
+      </Position>
+      <Position>
+        <Filename Value="UIClickerImgEffects.ppr"/>
+        <Caret Line="413" Column="33" TopLine="401"/>
+      </Position>
+      <Position>
+        <Filename Value="UIClickerImgEffects.ppr"/>
+        <Caret Line="416" Column="52" TopLine="402"/>
+      </Position>
+      <Position>
+        <Filename Value="UIClickerImgEffects.ppr"/>
+        <Caret Line="398" Column="61" TopLine="392"/>
+      </Position>
+      <Position>
+        <Filename Value="UIClickerImgEffects.ppr"/>
+        <Caret Line="400" Column="45" TopLine="392"/>
+      </Position>
+      <Position>
+        <Filename Value="UIClickerImgEffects.ppr"/>
+        <Caret Line="295" Column="59" TopLine="281"/>
+      </Position>
+      <Position>
+        <Filename Value="UIClickerImgEffects.ppr"/>
+        <Caret Line="407" Column="43" TopLine="395"/>
+      </Position>
+      <Position>
+        <Filename Value="UIClickerImgEffects.ppr"/>
+        <Caret Line="428" Column="77" TopLine="414"/>
+      </Position>
+      <Position>
+        <Filename Value="ImgEffectsPluginProperties.pas"/>
+        <Caret Line="65" Column="37" TopLine="58"/>
+      </Position>
+      <Position>
+        <Filename Value="ImgEffectsPluginProperties.pas"/>
+        <Caret Line="76" Column="26" TopLine="66"/>
+      </Position>
+      <Position>
+        <Filename Value="ImgEffectsPluginProperties.pas"/>
+        <Caret Line="125" Column="29" TopLine="113"/>
+      </Position>
+      <Position>
+        <Filename Value="UIClickerImgEffects.ppr"/>
+        <Caret Line="117" Column="40" TopLine="96"/>
+      </Position>
+      <Position>
+        <Filename Value="UIClickerImgEffects.ppr"/>
+        <Caret Line="43" Column="33" TopLine="28"/>
+      </Position>
+      <Position>
+        <Filename Value="UIClickerImgEffects.ppr"/>
+        <Caret Line="118" Column="27" TopLine="96"/>
+      </Position>
+      <Position>
+        <Filename Value="UIClickerImgEffects.ppr"/>
+        <Caret Line="458" Column="11" TopLine="434"/>
+      </Position>
+      <Position>
+        <Filename Value="ImgEffectsPluginProperties.pas"/>
+        <Caret Line="104" Column="381" TopLine="95"/>
+      </Position>
+      <Position>
+        <Filename Value="ImgEffectsPluginProperties.pas"/>
+        <Caret Line="107" Column="277" TopLine="95"/>
+      </Position>
+      <Position>
+        <Filename Value="ImgEffectsPluginProperties.pas"/>
+        <Caret Line="98" Column="635" TopLine="95"/>
+      </Position>
+      <Position>
+        <Filename Value="UIClickerImgEffects.ppr"/>
+        <Caret Line="446" Column="43" TopLine="441"/>
+      </Position>
+    </JumpHistory>
+    <RunParams>
+      <FormatVersion Value="2"/>
+      <Modes ActiveMode=""/>
+    </RunParams>
+  </ProjectSession>
+  <Debugging>
+    <BreakPoints>
+      <Item>
+        <Kind Value="bpkSource"/>
+        <WatchScope Value="wpsLocal"/>
+        <WatchKind Value="wpkWrite"/>
+        <Source Value="ImgEffectsPluginProperties.pas"/>
+        <Line Value="109"/>
+      </Item>
+    </BreakPoints>
+  </Debugging>
+</CONFIG>

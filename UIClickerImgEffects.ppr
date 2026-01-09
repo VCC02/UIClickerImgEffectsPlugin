@@ -1,0 +1,481 @@
+{
+    Copyright (C) 2026 VCC
+    creation date: 09 Jan 2026
+    initial release date: 09 Jan 2026
+
+    author: VCC
+    Permission is hereby granted, free of charge, to any person obtaining a copy
+    of this software and associated documentation files (the "Software"),
+    to deal in the Software without restriction, including without limitation
+    the rights to use, copy, modify, merge, publish, distribute, sublicense,
+    and/or sell copies of the Software, and to permit persons to whom the
+    Software is furnished to do so, subject to the following conditions:
+    The above copyright notice and this permission notice shall be included
+    in all copies or substantial portions of the Software.
+    THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+    EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+    MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+    IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM,
+    DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
+    TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE
+    OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+}
+
+
+library UIClickerImgEffects;
+
+{$mode objfpc}{$H+}
+
+uses
+  LCLIntf, LCLType, Interfaces, Classes, SysUtils, Graphics, ImgEffectsDM, ImgList,
+  ClickerActionPlugins, ClickerUtils, DllUtils,
+  ImgEffectsPluginProperties,
+  BitmapProcessing, BitmapConv;
+
+
+var
+  AddToLogCallback: TOnActionPlugin_AddToLog;
+
+  ImageEffectPropertyValue: TImageEffect;
+  TakeScreenshotForBackgroundPropertyValue: string;
+  ScreenshotSettingsActionPropertyValue: string;
+  BackgroundFileNamePropertyValue: string;
+  OtherBitmapsActionPropertyValue: string;
+
+
+procedure AddToLog(AMsg: string);  //thread safe
+begin
+  if @AddToLogCallback <> nil then
+    AddToLogCallback(DefaultPluginReference, @AMsg[1]);
+end;
+
+
+function GetAPIVersion: DWord; cdecl;
+begin
+  Result := CActionPlugin_APIVersion;
+end;
+
+
+procedure GetListOfProperties(APluginReference: Pointer;                 //UIClicker passes the plugin reference to the plugin, then the plugin calls some callbacks with that reference
+                              AListOfProperties: Pointer;
+                              AListOfPropertiesLen: PDWord;
+                              AOnActionPlugin_UpdatePropertyIcons: TOnActionPlugin_UpdatePropertyIcons); cdecl;
+var
+  Properties: string;
+  i: Integer;
+  TempMemStream: TMemoryStream;
+  Bmp: TBitmap;
+begin
+  Properties := FillInPropertyDetails;
+  AListOfPropertiesLen^ := SetPointedContentFromString(Properties, AListOfProperties);
+
+  dmProperties := TdmProperties.Create(nil);
+  try
+    for i := 0 to CPropertiesCount - 1 do
+    begin
+      TempMemStream := TMemoryStream.Create;
+      Bmp := TBitmap.Create;
+      try
+        Bmp.PixelFormat := pf24bit;
+        Bmp.Width := dmProperties.imglstProperties.Width;
+        Bmp.Height := dmProperties.imglstProperties.Height;
+        Bmp.Canvas.Pen.Color := clWhite;
+        Bmp.Canvas.Brush.Color := clWhite;
+        Bmp.Canvas.Rectangle(0, 0, Bmp.Width, Bmp.Height);
+
+        dmProperties.imglstProperties.Draw(Bmp.Canvas, 0, 0, i, dsNormal, itImage);
+        Bmp.SaveToStream(TempMemStream);
+
+        AOnActionPlugin_UpdatePropertyIcons(APluginReference, TempMemStream.Memory, TempMemStream.Size);
+      finally
+        TempMemStream.Free;
+        Bmp.Free;
+      end;
+    end;
+  finally
+    dmProperties.Free;
+  end;
+end;
+
+
+procedure GetPluginSettingsFromProperties(AProperties: TStringList; AListOfVars: string);
+var
+  i: TImageEffect;
+  ImageEffectPropertyValueStr: string;
+begin
+  ImageEffectPropertyValueStr := AProperties.Values[CImageEffectPropertyName];
+  ImageEffectPropertyValue := ieBlur4x;
+  for i := Low(TImageEffect) to High(TImageEffect) do
+  begin
+    if CImageEffectStr[i] = ImageEffectPropertyValueStr then
+    begin
+      ImageEffectPropertyValue := i;
+      Break;
+    end;
+  end;
+
+  TakeScreenshotForBackgroundPropertyValue := AProperties.Values[CTakeScreenshotForBackgroundPropertyName];
+  ScreenshotSettingsActionPropertyValue := AProperties.Values[CScreenshotSettingsActionPropertyName];
+  BackgroundFileNamePropertyValue := AProperties.Values[CBackgroundFileNamePropertyName];
+  OtherBitmapsActionPropertyValue := AProperties.Values[COtherBitmapsActionPropertyName];
+end;
+
+
+procedure ShiftBmpToLeft(ASrcBmp, ADestBmp: TBitmap; Amount: Integer = 1);
+begin
+  WipeBitmap(ADestBmp, ASrcBmp.Width, ASrcBmp.Height);
+  Bitblt(ADestBmp.Canvas.Handle,
+         ASrcBmp.Width - Amount, //X   x-coord of destination upper-left corner
+         0, //Y   y-coord of destination upper-left corner
+         Amount,   //src and dest width
+         ASrcBmp.Height,  //src and dest height
+         ASrcBmp.Canvas.Handle,      //src DC
+         ASrcBmp.Width - Amount,     //offset for source
+         0,     //offset for source
+         SRCCOPY);
+
+  Bitblt(ADestBmp.Canvas.Handle,
+         0, //X   x-coord of destination upper-left corner
+         0, //Y   y-coord of destination upper-left corner
+         ASrcBmp.Width - Amount,   //src and dest width
+         ASrcBmp.Height,  //src and dest height
+         ASrcBmp.Canvas.Handle,      //src DC
+         Amount,     //offset for source
+         0,     //offset for source
+         SRCCOPY);
+end;
+
+
+procedure ShiftBmpToRight(ASrcBmp, ADestBmp: TBitmap; Amount: Integer = 1);
+begin
+  WipeBitmap(ADestBmp, ASrcBmp.Width, ASrcBmp.Height);
+  Bitblt(ADestBmp.Canvas.Handle,
+         0, //X   x-coord of destination upper-left corner
+         0, //Y   y-coord of destination upper-left corner
+         Amount,   //src and dest width
+         ASrcBmp.Height,  //src and dest height
+         ASrcBmp.Canvas.Handle,      //src DC
+         0,     //offset for source
+         0,     //offset for source
+         SRCCOPY);
+
+  Bitblt(ADestBmp.Canvas.Handle,
+         Amount, //X   x-coord of destination upper-left corner
+         0, //Y   y-coord of destination upper-left corner
+         ASrcBmp.Width - Amount,   //src and dest width
+         ASrcBmp.Height,  //src and dest height
+         ASrcBmp.Canvas.Handle,      //src DC
+         0,     //offset for source
+         0,     //offset for source
+         SRCCOPY);
+end;
+
+
+procedure ShiftBmpToTop(ASrcBmp, ADestBmp: TBitmap; Amount: Integer = 1);
+begin
+  WipeBitmap(ADestBmp, ASrcBmp.Width, ASrcBmp.Height);
+  Bitblt(ADestBmp.Canvas.Handle,
+         0, //X   x-coord of destination upper-left corner
+         ASrcBmp.Height - Amount, //Y   y-coord of destination upper-left corner
+         ASrcBmp.Width,   //src and dest width
+         Amount,  //src and dest height
+         ASrcBmp.Canvas.Handle,      //src DC
+         0,     //offset for source
+         ASrcBmp.Height - Amount,     //offset for source
+         SRCCOPY);
+
+  Bitblt(ADestBmp.Canvas.Handle,
+         0, //X   x-coord of destination upper-left corner
+         0, //Y   y-coord of destination upper-left corner
+         ASrcBmp.Width,   //src and dest width
+         ASrcBmp.Height - Amount,  //src and dest height
+         ASrcBmp.Canvas.Handle,      //src DC
+         0,     //offset for source
+         Amount,     //offset for source
+         SRCCOPY);
+end;
+
+
+procedure ShiftBmpToBottom(ASrcBmp, ADestBmp: TBitmap; Amount: Integer = 1);
+begin
+  WipeBitmap(ADestBmp, ASrcBmp.Width, ASrcBmp.Height);
+  Bitblt(ADestBmp.Canvas.Handle,
+         0, //X   x-coord of destination upper-left corner
+         0, //Y   y-coord of destination upper-left corner
+         ASrcBmp.Width,   //src and dest width
+         Amount,  //src and dest height
+         ASrcBmp.Canvas.Handle,      //src DC
+         0,     //offset for source
+         0,     //offset for source
+         SRCCOPY);
+
+  Bitblt(ADestBmp.Canvas.Handle,
+         0, //X   x-coord of destination upper-left corner
+         Amount, //Y   y-coord of destination upper-left corner
+         ASrcBmp.Width,   //src and dest width
+         ASrcBmp.Height - Amount,  //src and dest height
+         ASrcBmp.Canvas.Handle,      //src DC
+         0,     //offset for source
+         0,     //offset for source
+         SRCCOPY);
+end;
+
+
+procedure Blur4px(ASrcBmp, ADestBmp: TBitmap);  //4px means that it uses the left, right, top and bottom pixels around any given pixel, to compute the average.
+var
+  WorkBmp, LeftBmp, RightBmp, TopBmp, BottomBmp, WorkBmpH, WorkBmpV: TBitmap;
+begin
+  WorkBmp := TBitmap.Create;
+  WorkBmpH := TBitmap.Create;
+  WorkBmpV := TBitmap.Create;
+  try
+    WipeBitmap(WorkBmp, ASrcBmp.Width, ASrcBmp.Height);
+    WipeBitmap(WorkBmpH, ASrcBmp.Width, ASrcBmp.Height);
+    WipeBitmap(WorkBmpV, ASrcBmp.Width, ASrcBmp.Height);
+    WipeBitmap(ADestBmp, ASrcBmp.Width, ASrcBmp.Height);
+
+    LeftBmp := TBitmap.Create;
+    RightBmp := TBitmap.Create;
+    try
+      ShiftBmpToLeft(ASrcBmp, LeftBmp, 1);
+      ShiftBmpToRight(ASrcBmp, RightBmp, 1);
+      AvgBitmapWithBitmap(LeftBmp, RightBmp, WorkBmpH);
+    finally
+      LeftBmp.Free;
+      RightBmp.Free;
+    end;
+
+    TopBmp := TBitmap.Create;
+    BottomBmp := TBitmap.Create;
+    try
+      ShiftBmpToTop(ASrcBmp, TopBmp, 1);
+      ShiftBmpToBottom(ASrcBmp, BottomBmp, 1);
+      AvgBitmapWithBitmap(TopBmp, BottomBmp, WorkBmpV);
+    finally
+      TopBmp.Free;
+      BottomBmp.Free;
+    end;
+
+    AvgBitmapWithBitmap(WorkBmpH, WorkBmpV, WorkBmp);
+    AvgBitmapWithBitmap(WorkBmp, ASrcBmp, ADestBmp);
+  finally
+    WorkBmp.Free;
+    WorkBmpH.Free;
+    WorkBmpV.Free;
+  end;
+end;
+
+
+procedure Blur8px(ASrcBmp, ADestBmp: TBitmap);   //ToDo: implement Blur8px
+begin
+  Blur4px(ASrcBmp, ADestBmp);
+  //in addition to the LeftBmp, RightBmp, TopBmp, BottomBmp bitmaps, this one has to have top-left, top-right, bot-left and bot-right.
+end;
+
+
+function ExecutePlugin(APluginReference: Pointer;
+                       AListOfPluginSettings: Pointer;
+                       AListOfPluginSettingsLen: PDWord;
+
+                       AOnActionPlugin_GetActionCount: TOnActionPlugin_GetActionCount;
+                       AOnActionPlugin_GetActionInfoByIndex: TOnActionPlugin_GetActionInfoByIndex;
+                       AOnActionPlugin_GetActionContentByIndex: TOnActionPlugin_GetActionContentByIndex;
+                       AOnActionPlugin_ExecuteAction: TOnActionPlugin_ExecuteAction;
+                       AOnActionPlugin_GetAllTemplateVars: TOnActionPlugin_GetAllTemplateVars;
+                       AOnActionPlugin_SetTemplateVar: TOnActionPlugin_SetTemplateVar;
+                       AOnActionPlugin_DebugPoint: TOnActionPlugin_DebugPoint;
+                       AOnActionPlugin_AddToLog: TOnActionPlugin_AddToLog;
+                       AOnActionPlugin_SetResultImg: TOnActionPlugin_SetResultImg;
+                       AOnActionPlugin_LoadBitmap: TOnActionPlugin_LoadBitmap;
+                       AOnActionPlugin_GetAllowedFilesInfo: TOnActionPlugin_GetAllowedFilesInfo;
+                       AOnActionPlugin_SetBitmap: TOnActionPlugin_SetBitmap;
+                       AOnActionPlugin_Screenshot: TOnActionPlugin_Screenshot;
+                       AOnActionPlugin_CheckStopAllActionsOnDemand: TOnActionPlugin_CheckStopAllActionsOnDemand;
+                       AOnActionPlugin_InMemFS: TOnActionPlugin_InMemFS;
+                       AOnActionPlugin_AppProcMsg: TOnActionPlugin_AppProcMsg
+                       ): Boolean; cdecl;
+var
+  ActionCount, IndexOfScreenshotSettingsActionProperty, IndexOfOtherBitmapsActionProperty: Integer;
+  PluginSettingsStr, AllVarsStr: string;
+  ListOfAllVars: TStringList;
+  s: string;
+  ActionTypeDWord: DWord;
+  ActionType: TClkAction;
+  PluginSettings: TStringList;
+
+
+  procedure SetTemplateVar(AVarName, AVarValue: string);
+  begin
+    AOnActionPlugin_SetTemplateVar(APluginReference, @AVarName[1], @AVarValue[1]);
+  end;
+
+  procedure GetActionInfoByIndex(AIndex: Integer; out AActionName: string; var AActionType: DWord);
+  var
+    Buffer: string;
+    ActionNamePtr: Pointer;
+    NameLengthDWord: DWord;
+  begin
+    SetLength(Buffer, CMaxSharedStringLength + 1);
+    ActionNamePtr := @Buffer[1];
+    NameLengthDWord := 0;
+
+    AActionName := '';
+    AOnActionPlugin_GetActionInfoByIndex(APluginReference, AIndex, ActionNamePtr, @NameLengthDWord, @AActionType);
+    SetPointedContentToString(ActionNamePtr, AActionName);
+    SetLength(AActionName, NameLengthDWord);
+  end;
+
+  procedure GetAllTemplateVars(out AAllTemplateVars: string);  //AAllTemplateVars are encoded as CRLF separated key=value strings, ready to be used on a TStringlist
+  var
+    Buffer: string;
+    AllTemplateVarsPtr: Pointer;
+    NameLengthDWord: DWord;
+  begin
+    SetLength(Buffer, CMaxSharedStringLength + 1);
+    AllTemplateVarsPtr := @Buffer[1];
+    NameLengthDWord := 0;
+    AAllTemplateVars := '';
+
+    AOnActionPlugin_GetAllTemplateVars(APluginReference, AllTemplateVarsPtr, @NameLengthDWord);  //decode action execution results
+
+    SetPointedContentToString(AllTemplateVarsPtr, AAllTemplateVars);
+    SetLength(AAllTemplateVars, NameLengthDWord);
+  end;
+
+  function GetPluginSettings: string;
+  begin
+    SetLength(Result, CMaxSharedStringLength);
+    SetPointedContentToString(AListOfPluginSettings, Result);
+    SetLength(Result, AListOfPluginSettingsLen^);
+  end;
+
+var
+  i, DiffCount, idx1, idx2: Integer;
+  s1, s2, Instr: string;
+begin
+  Result := True;
+  try
+    DefaultOnActionPlugin_DebugPoint := AOnActionPlugin_DebugPoint;
+    DefaultPluginReference := APluginReference;
+    AddToLogCallback := AOnActionPlugin_AddToLog;
+
+    ListOfAllVars := TStringList.Create;
+    try
+      PluginSettings := TStringList.Create;
+      try
+        if not DbgPoint('Entering ExecutePlugin', '') then     //see ClkDbgSym.ppr for expected statement formats
+          Exit;
+
+        ActionCount := AOnActionPlugin_GetActionCount(APluginReference);
+        if ActionCount = 0 then
+        begin
+          SetTemplateVar(CActionPlugin_ExecutionResultErrorVar, 'This plugin does not run on an empty template.');
+          Exit;
+        end;
+
+        PluginSettingsStr := GetPluginSettings;
+        PluginSettings.Text := PluginSettingsStr;
+
+        if PluginSettings.Count <> CPropertiesCount then
+        begin
+          SetTemplateVar(CActionPlugin_ExecutionResultErrorVar, 'Cannot get the list of plugin properties.');
+          Exit;
+        end;
+
+        GetAllTemplateVars(AllVarsStr);
+        GetPluginSettingsFromProperties(PluginSettings, AllVarsStr);
+        ListOfAllVars.Text := AllVarsStr;
+
+        s := 'unset action';
+        IndexOfScreenshotSettingsActionProperty := -1;
+        IndexOfOtherBitmapsActionProperty := -1;
+        for i := 0 to ActionCount - 1 do
+        begin
+          GetActionInfoByIndex(i, s, ActionTypeDWord);
+          AddToLog('Found action [' + IntToStr(i) + ']: ' + s);
+
+          if ActionTypeDWord <> $FFFFFFFF then
+          begin
+            ActionType := TClkAction(ActionTypeDWord);
+
+            if ActionType in [acFindSubControl {, acPlugin}] then
+              if s = PluginSettings.Values[CScreenshotSettingsActionPropertyName] then   //the current action name ([i]) matches FindSubControl property
+              begin
+                IndexOfScreenshotSettingsActionProperty := i;
+                //Break;
+              end;
+
+            if ActionType in [acFindSubControl {, acPlugin}] then
+              if s = PluginSettings.Values[COtherBitmapsActionPropertyName] then   //the current action name ([i]) matches FindSubControl property
+              begin
+                IndexOfOtherBitmapsActionProperty := i;
+                //Break;
+              end;
+          end;
+        end;
+
+        if (IndexOfScreenshotSettingsActionProperty = -1) and (TakeScreenshotForBackgroundPropertyValue = 'True') then
+        begin
+          SetTemplateVar(CActionPlugin_ExecutionResultErrorVar, 'ScreenshotSettings action not configured.');
+          Exit;
+        end;
+
+        //if IndexOfOtherBitmapsActionProperty = -1 then
+        //begin
+        //  SetTemplateVar(CActionPlugin_ExecutionResultErrorVar, 'OtherBitmaps action not configured.');
+        //  Exit;
+        //end;
+      finally
+        PluginSettings.Free;
+      end;
+
+      if TakeScreenshotForBackgroundPropertyValue = 'True' then
+      begin
+        AddToLog('Taking a screenshot, using setting from (' + ScreenshotSettingsActionPropertyValue + ') action...');
+        if not AOnActionPlugin_ExecuteAction(APluginReference, @ScreenshotSettingsActionPropertyValue[1]) then
+        begin
+          SetTemplateVar(CActionPlugin_ExecutionResultErrorVar, 'The required "' + ScreenshotSettingsActionPropertyValue + '" action has failed on updating $Control_Left$ and $Control_Top$.');
+          Exit;
+        end;
+      end;
+
+      //GetAllTemplateVars(AllVarsStr);
+      //ListOfAllVars.Text := AllVarsStr;
+
+      //ToDo: call Blur4px(); or other effect
+      if BackgroundFileNamePropertyValue <> '' then
+      begin
+        //Load bmp
+        //Blur4px
+        //save bmp
+      end;
+
+      if OtherBitmapsActionPropertyValue <> '' then
+      begin
+        //get bmp filename from txt and bmp properties (no pmtv support)
+        //for through all files
+        //Load bmp
+        //Blur4px
+        //save bmp
+      end;
+    finally
+      ListOfAllVars.Free;
+    end;
+  except
+    on E: Exception do
+    begin
+      Result := False;
+      SetTemplateVar(CActionPlugin_ExecutionResultErrorVar, 'Plugin ex: ' + E.Message);
+    end;
+  end;
+end;
+
+
+exports
+  GetAPIVersion,
+  GetListOfProperties,
+  ExecutePlugin;
+
+begin
+end.
+
