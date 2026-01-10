@@ -34,20 +34,23 @@ uses
 
 type
   TImageEffect = (ieBlur4x, ieBlur8x, ieBlur_Reserved, ieGrayscale);
+  TBackgroundFileLocation = (bflDisk, bflMem, bflDiskToMem);
 
 const
-  CPropertiesCount = 5;
+  CPropertiesCount = 6;
 
   CImageEffectPropertyIndex = 0;
   CTakeScreenshotForBackgroundPropertyIndex = 1;
   CScreenshotSettingsActionPropertyIndex = 2;
   CBackgroundFileNamePropertyIndex = 3;
-  COtherBitmapsActionPropertyIndex = 4;
+  CBackgroundFileLocationPropertyIndex = 4;
+  COtherBitmapsActionPropertyIndex = 5;
 
   CImageEffectPropertyName = 'ImageEffect';
   CTakeScreenshotForBackgroundPropertyName = 'TakeScreenshotForBackground';
   CScreenshotSettingsActionPropertyName = 'ScreenshotSettingsAction';
   CBackgroundFileNamePropertyName = 'BackgroundFileName';
+  CBackgroundFileLocationPropertyName = 'BackgroundFileLocation';
   COtherBitmapsActionPropertyName = 'OtherBitmapsAction';
 
   CImageEffect_ieBlur4x = 'ieBlur4x';
@@ -56,12 +59,21 @@ const
   CImageEffect_ieGrayscale = 'ieGrayscale';  //may include interlace lines as an option
 
   CImageEffectStr: array[TImageEffect] of string = (CImageEffect_ieBlur4x, CImageEffect_ieBlur8x, CImageEffect_ieBlur_Reserved, CImageEffect_ieGrayscale);
+  CEffectStr = '_effect';
+
+  CBackgroundFileLocation_bflDisk = 'bflDisk';
+  CBackgroundFileLocation_bflMem = 'bflMem';
+  CBackgroundFileLocationbflDiskToMem = 'bflDiskToMem';
+
+  CBackgroundFileLocationStr: array[TBackgroundFileLocation] of string = (CBackgroundFileLocation_bflDisk, CBackgroundFileLocation_bflMem, CBackgroundFileLocationbflDiskToMem);
+
 
   CRequiredPropertyNames: array[0..CPropertiesCount - 1] of string = (  //these are the expected property names, configured in plugin properties
     CImageEffectPropertyName,
     CTakeScreenshotForBackgroundPropertyName,
     CScreenshotSettingsActionPropertyName,
     CBackgroundFileNamePropertyName,
+    CBackgroundFileLocationPropertyName,
     COtherBitmapsActionPropertyName
   );
 
@@ -73,6 +85,7 @@ const
     'BooleanCombo', //TakeScreenshotForBackground
     'TextWithArrow', //ScreenshotSettingsAction
     'TextWithArrow', //BackgroundFileName
+    'EnumCombo', //BackgroundFileLocation
     'TextWithArrow' //OtherBitmaps
   );
 
@@ -81,6 +94,7 @@ const
     CDTBool, //TakeScreenshotForBackground
     CDTString, //ScreenshotSettingsAction
     CDTString, //BackgroundFileName
+    CDTEnum, //BackgroundFileLocation
     CDTString //OtherBitmaps
   );
 
@@ -89,23 +103,26 @@ const
     0, //TakeScreenshotForBackground
     0, //ScreenshotSettingsAction
     0, //BackgroundFileName
+    3, //BackgroundFileLocation
     0  //OtherBitmaps
   );
 
   CPluginEnumStrings: array[0..CPropertiesCount - 1] of string = (
-    CImageEffect_ieBlur4x + #4#5 + CImageEffect_ieBlur8x + #4#5 + CImageEffect_ieBlur_Reserved + #4#5 + CImageEffect_ieGrayscale + #4#5 , //ImageEffect
+    CImageEffect_ieBlur4x + #4#5 + CImageEffect_ieBlur8x + #4#5 + CImageEffect_ieBlur_Reserved + #4#5 + CImageEffect_ieGrayscale, //ImageEffect
     '', //TakeScreenshotForBackground
     '', //ScreenshotSettingsAction
     '', //BackgroundFileName
+    CBackgroundFileLocation_bflDisk + #4#5 + CBackgroundFileLocation_bflMem + #4#5 + CBackgroundFileLocationbflDiskToMem, //BackgroundFileLocation
     ''  //OtherBitmaps
   );
 
   CPluginHints: array[0..CPropertiesCount - 1] of string = (
     'The image effect to be applied to a background bitmap (e.g. a screenshot) and other configured bitmaps.', //ImageEffect
     'If True, the plugin takes a screenshot, using the setting from the action, mentioned in the ' + CScreenshotSettingsActionPropertyName + ' property.', //TakeScreenshotForBackground
-    'Name of an existing FindSubControl action, which is used to get the screenshot settings.' + #4#5 + 'Usually, a FindControl action may have to be executed prior to this action, to prepare the control and the screenshot area.' + #4#5 + 'The screenshot is saved to ExtRendering InMem file system, using the ' + CScreenshotFilename + ' name.',  //ScreenshotSettingsAction
-    'Name of a bitmap file, used as a background bitmap (the one where the text or other bitmaps are searched on), which will be used as a source bitmap for applying the selected effect.' + #4#5 + 'The destination file name is derived from this name, by applying the "_effect" suffix, before the file extension.' + #4#5 + 'If this name is prefixed with "' + CExtBmp_Prefix + '" (no quotes), then the file is expected to be loaded from the external rendering In-Mem FS. As an example, ' + CScreenshotFilename + ' is saved there, when taking a screenshot. The destination file is saved in the same location as the source file, In-Mem FS or disk, depending on prefix.' + #4#5 + 'This property can be left empty, to apply no effect to a background bitmap.',  //BackgroundFileName
-    'Name of an existing FindSubControl action, which is used to get the file names of the searched bitmaps.' + #4#5 + 'These can be bitmap files, from the MatchBitmapFiles property, or the bitmap files generated from text, when the action is configured to only render text (its MatchBitmapAlgorithm is set to mbaRenderTextOnly).' + #4#5 + 'In case of a render text only action, the bitmap files are loaded from the ExtRendering InMem file system. They have the "ExtMem:\<ActionName>_<ProfileName>.bmp" format.' + #4#5 + 'In the same way as applying the effect on the background bitmap, the destination files will have the "_effect" suffix.' + #4#5 + 'This property can be left empty, to apply no effect on other bitmap files.' //OtherBitmaps
+    'Name of an existing FindSubControl action, which is used to get the screenshot settings.' + #4#5 + 'Usually, a FindControl action may have to be executed prior to this action, to prepare the control and the screenshot area.' + #4#5 + 'The screenshot is saved to ExtRendering InMem file system, using the ' + CScreenshotFilename + ' name.' + #4#5 + 'This may have to be a disabled action, so it won''t be executed automatically.',  //ScreenshotSettingsAction
+    'Name of a bitmap file, used as a background bitmap (the one where the text or other bitmaps are searched on), which will be used as a source bitmap for applying the selected effect.' + #4#5 + 'The destination file name is derived from this name, by applying the "' + CEffectStr + '" suffix, before the file extension.' + #4#5 + 'This property can be left empty, to apply no effect to a background bitmap.',  //BackgroundFileName
+    'Location of the background bitmap file:' + #4#5 + '  ' + CBackgroundFileLocation_bflDisk + ' - Loads the file from disk and saves the converted file to disk.' + #4#5 + '  ' + CBackgroundFileLocation_bflMem + ' - Loads the file from Ext InMem FS and saves the converted file to Ext InMem FS.' + #4#5 + '  ' + CBackgroundFileLocationbflDiskToMem + ' - Loads the file from disk and saves the converted file to Ext InMem FS.', //BackgroundFileLocation
+    'Name of an existing FindSubControl action, which is used to get the file names of the searched bitmaps.' + #4#5 + 'These can be bitmap files, from the MatchBitmapFiles property, or the bitmap files generated from text, when the action is configured to only render text (its MatchBitmapAlgorithm is set to mbaRenderTextOnly).' + #4#5 + 'In case of a render text only action, the bitmap files are loaded from the ExtRendering InMem file system. They have the "ExtMem:\<ActionName>_<ProfileName>.bmp" format.' + #4#5 + 'In the same way as applying the effect on the background bitmap, the destination files will have the "' + CEffectStr + '" suffix.' + #4#5 + 'This property can be left empty, to apply no effect on other bitmap files.' //OtherBitmaps
   );
 
   CPropertyEnabled: array[0..CPropertiesCount - 1] of string = (  // The 'PropertyValue[<index>]' replacement uses indexes from the following array only. It doesn't count fixed properties.
@@ -113,6 +130,7 @@ const
     '', //TakeScreenshotForBackground
     'PropertyValue[1]==True', //ScreenshotSettingsAction
     '', //BackgroundFileName
+    '', //BackgroundFileLocation
     '' //OtherBitmaps
   );
 
@@ -120,7 +138,8 @@ const
     CImageEffect_ieBlur4x, //ImageEffect
     'True', //TakeScreenshotForBackground
     '', //ScreenshotSettingsAction
-    CExtBmp_Prefix + PathDelim + CScreenshotFilename, //BackgroundFileName
+    CScreenshotFilename, //BackgroundFileName
+    CBackgroundFileLocation_bflMem,
     ''  //OtherBitmaps
   );
 

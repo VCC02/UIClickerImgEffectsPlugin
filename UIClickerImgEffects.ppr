@@ -28,8 +28,8 @@ library UIClickerImgEffects;
 
 uses
   LCLIntf, LCLType, Interfaces, Classes, SysUtils, Graphics, ImgEffectsDM, ImgList,
-  ClickerActionPlugins, ClickerUtils, DllUtils,
-  ImgEffectsPluginProperties,
+  ClickerActionPlugins, ClickerUtils, DllUtils, ClickerFileProviderUtils,
+  ImgEffectsPluginProperties, ClickerActionProperties,
   BitmapProcessing, BitmapConv;
 
 
@@ -40,6 +40,7 @@ var
   TakeScreenshotForBackgroundPropertyValue: string;
   ScreenshotSettingsActionPropertyValue: string;
   BackgroundFileNamePropertyValue: string;
+  BackgroundFileLocationValue: TBackgroundFileLocation;
   OtherBitmapsActionPropertyValue: string;
 
 
@@ -101,7 +102,8 @@ end;
 procedure GetPluginSettingsFromProperties(AProperties: TStringList; AListOfVars: string);
 var
   i: TImageEffect;
-  ImageEffectPropertyValueStr: string;
+  j: TBackgroundFileLocation;
+  ImageEffectPropertyValueStr, BackgroundFileLocationValueStr: string;
 begin
   ImageEffectPropertyValueStr := AProperties.Values[CImageEffectPropertyName];
   ImageEffectPropertyValue := ieBlur4x;
@@ -110,6 +112,17 @@ begin
     if CImageEffectStr[i] = ImageEffectPropertyValueStr then
     begin
       ImageEffectPropertyValue := i;
+      Break;
+    end;
+  end;
+
+  BackgroundFileLocationValueStr := AProperties.Values[CBackgroundFileLocationPropertyName];
+  BackgroundFileLocationValue := bflMem;
+  for j := Low(TBackgroundFileLocation) to High(TBackgroundFileLocation) do
+  begin
+    if CBackgroundFileLocationStr[j] = BackgroundFileLocationValueStr then
+    begin
+      BackgroundFileLocationValue := j;
       Break;
     end;
   end;
@@ -273,6 +286,264 @@ begin
 end;
 
 
+function BitmapIsAllowedToBeLoaded(APluginReference: Pointer; AOnActionPlugin_GetAllowedFilesInfo: TOnActionPlugin_GetAllowedFilesInfo; AFnm: string; out ADenyReason: string): Boolean;
+var
+  TempFileProvider: TFileProvider;
+  FullTemplatesDir, AllowedFileDirsForServer, AllowedFileExtensionsForServer: string;
+  FullTemplatesDirPtr, AllowedFileDirsForServerPtr, AllowedFileExtensionsForServerPtr: Pointer;
+begin
+  TempFileProvider := TFileProvider.Create;
+  try
+    SetLength(FullTemplatesDir, CMaxSharedStringLength + 1);
+    SetLength(AllowedFileDirsForServer, CMaxSharedStringLength + 1);
+    SetLength(AllowedFileExtensionsForServer, CMaxSharedStringLength + 1);
+
+    FullTemplatesDirPtr := @FullTemplatesDir[1];
+    AllowedFileDirsForServerPtr := @AllowedFileDirsForServer[1];
+    AllowedFileExtensionsForServerPtr := @AllowedFileExtensionsForServer[1];
+
+    AOnActionPlugin_GetAllowedFilesInfo(APluginReference, FullTemplatesDirPtr, AllowedFileDirsForServerPtr, AllowedFileExtensionsForServerPtr);
+    FullTemplatesDir := Copy(FullTemplatesDir, 1, Pos(#0, FullTemplatesDir) - 1);
+    AllowedFileDirsForServer := Copy(AllowedFileDirsForServer, 1, Pos(#0, AllowedFileDirsForServer) - 1);
+    AllowedFileExtensionsForServer := Copy(AllowedFileExtensionsForServer, 1, Pos(#0, AllowedFileExtensionsForServer) - 1);
+
+    TempFileProvider.FullTemplatesDir := FullTemplatesDir;
+
+    TempFileProvider.AddListOfAccessibleDirs(AllowedFileDirsForServer);
+    TempFileProvider.AddListOfAccessibleFileExtensions(AllowedFileExtensionsForServer);
+
+    Result := TempFileProvider.FileIsAllowed(AFnm, ADenyReason);
+  finally
+    TempFileProvider.Free;
+  end;
+end;
+
+
+procedure HandleOnFileContent(ACallReference, AStreamContent: Pointer; AStreamSize: Int64); cdecl;
+var
+  TempStream: TMemoryStream;
+  DestBmp: TBitmap;
+begin
+  if AStreamSize <= 0 then
+    Exit;
+
+  DestBmp := TBitmap(ACallReference); //created by caller
+
+  TempStream := TMemoryStream.Create;
+  try
+    TempStream.SetSize(AStreamSize);
+    Move(AStreamContent^, TempStream.Memory^, AStreamSize);
+    DestBmp.LoadFromStream(TempStream, AStreamSize);
+  finally
+    TempStream.Free;
+  end;
+end;
+
+
+function LoadBitmap(APluginReference: Pointer;
+                    AOnActionPlugin_GetAllowedFilesInfo: TOnActionPlugin_GetAllowedFilesInfo;
+                    AOnActionPlugin_LoadBitmap: TOnActionPlugin_LoadBitmap;
+                    AListOfAllVars: TStringList;
+                    var AFnm: string;
+                    ADestBmp: TBitmap;
+                    AFileLocation: TImageSourceFileNameLocation): Boolean;
+var
+  TempDenyReason: string;
+begin
+  AFnm := EvaluateAllReplacements(AListOfAllVars, AFnm);
+
+  if BitmapIsAllowedToBeLoaded(APluginReference, AOnActionPlugin_GetAllowedFilesInfo, AFnm, TempDenyReason) then                                      //isflDisk=0, isflMem=1
+    Result := AOnActionPlugin_LoadBitmap(APluginReference, @AFnm[1], ADestBmp, Ord(AFileLocation), @HandleOnFileContent)
+  else
+    Result := False;
+end;
+
+
+procedure SaveBitmapToExtRenderingInMemFS(APluginReference: Pointer; AOnActionPlugin_SetBitmap: TOnActionPlugin_SetBitmap; ABmp: TBitmap; AFnm: string);
+var
+  MemStream: TMemoryStream;
+begin
+  MemStream := TMemoryStream.Create;
+  try
+    ABmp.SaveToStream(MemStream);
+
+    AOnActionPlugin_SetBitmap(APluginReference, @AFnm[1], MemStream.Memory, MemStream.Size, ABmp.Width, ABmp.Height);
+  finally
+    MemStream.Free;
+  end;
+end;
+
+
+procedure ApplyEffectOnBmp(APluginReference: Pointer;
+                           AOnActionPlugin_GetAllowedFilesInfo: TOnActionPlugin_GetAllowedFilesInfo;
+                           AOnActionPlugin_LoadBitmap: TOnActionPlugin_LoadBitmap;
+                           AOnActionPlugin_SetBitmap: TOnActionPlugin_SetBitmap;
+                           AListOfAllVars: TStringList;
+                           AFileLocationValue: TBackgroundFileLocation;
+                           AFileName: string);
+var
+  SrcBmp, DestBmp: TBitmap;
+  SrcFnm, DestFnm: string;
+  LoadingResult: Boolean;
+  LoadingFileLocation: TImageSourceFileNameLocation;
+begin
+  if AFileLocationValue = bflMem then
+    LoadingFileLocation := isflMem
+  else
+    LoadingFileLocation := isflDisk;
+
+  SrcBmp := TBitmap.Create;
+  DestBmp := TBitmap.Create;
+  try
+    SrcFnm := AFileName;
+    AddToLog('SrcFnm: ' + SrcFnm);
+
+    LoadingResult := LoadBitmap(APluginReference,
+                                AOnActionPlugin_GetAllowedFilesInfo,
+                                AOnActionPlugin_LoadBitmap,
+                                AListOfAllVars,
+                                SrcFnm,
+                                SrcBmp,
+                                LoadingFileLocation);
+
+    if not LoadingResult then
+      raise Exception.Create('Can''t load background file, to apply effect on it.');
+
+    case ImageEffectPropertyValue of
+      ieBlur4x:
+        Blur4px(SrcBmp, DestBmp);
+
+      ieBlur8x:
+        Blur8px(SrcBmp, DestBmp);
+
+      ieBlur_Reserved:
+        Blur8px(SrcBmp, DestBmp);
+
+      ieGrayscale:
+      begin
+        WipeBitmap(DestBmp, SrcBmp.Width, SrcBmp.Height);
+        ConvertBitmapToGrayscale(SrcBmp, DestBmp);
+      end;
+    end;
+
+    if AFileLocationValue in [bflMem, bflDiskToMem] then
+    begin
+      DestFnm := ExtractFilePath(SrcFnm) + ExtractFileNameNoExt(SrcFnm) + CEffectStr + ExtractFileExt(SrcFnm);
+      AddToLog('DestFnm: ' + DestFnm);
+      SaveBitmapToExtRenderingInMemFS(APluginReference, AOnActionPlugin_SetBitmap, DestBmp, DestFnm);
+    end
+    else
+      DestBmp.SaveToFile(DestFnm);
+  finally
+    SrcBmp.Free;
+    DestBmp.Free;
+  end;
+end;
+
+
+procedure ApplyEffectOnBackgroundBmp(APluginReference: Pointer;
+                                     AOnActionPlugin_GetAllowedFilesInfo: TOnActionPlugin_GetAllowedFilesInfo;
+                                     AOnActionPlugin_LoadBitmap: TOnActionPlugin_LoadBitmap;
+                                     AOnActionPlugin_SetBitmap: TOnActionPlugin_SetBitmap;
+                                     AListOfAllVars: TStringList);
+begin
+  ApplyEffectOnBmp(APluginReference,
+                   AOnActionPlugin_GetAllowedFilesInfo,
+                   AOnActionPlugin_LoadBitmap,
+                   AOnActionPlugin_SetBitmap,
+                   AListOfAllVars,
+                   BackgroundFileLocationValue,
+                   BackgroundFileNamePropertyValue);
+end;
+
+
+procedure ApplyEffectOnOtherBmps(APluginReference: Pointer;
+                                 AOnActionPlugin_GetActionContentByIndex: TOnActionPlugin_GetActionContentByIndex;
+                                 AOnActionPlugin_GetAllowedFilesInfo: TOnActionPlugin_GetAllowedFilesInfo;
+                                 AOnActionPlugin_LoadBitmap: TOnActionPlugin_LoadBitmap;
+                                 AOnActionPlugin_SetBitmap: TOnActionPlugin_SetBitmap;
+                                 AListOfAllVars: TStringList;
+                                 AIndexOfOtherBitmapsActionProperty: Integer);
+var
+  ActionContentStr: string;
+  ActionContentPtr: Pointer;
+  ActionContentLen: DWord;
+  ListOfFindSubControlProperties, ListOfMatchBitmapFiles: TStringList;
+  MatchBitmapFilesStr: string;
+  DecodedAction: TClkFindSubControlOptions;
+  DecodingErr: string;
+  ActionOptions: TClkActionOptions;
+  i: Integer;
+  ProfileName, Fnm: string;
+begin
+  //get bmp filename from txt and bmp properties (no pmtv support):
+
+  SetLength(ActionContentStr, CMaxSharedStringLength + 1);
+  ActionContentPtr := @ActionContentStr[1];
+  AOnActionPlugin_GetActionContentByIndex(APluginReference, AIndexOfOtherBitmapsActionProperty, ActionContentPtr, @ActionContentLen);
+  SetLength(ActionContentStr, ActionContentLen);
+
+  ListOfFindSubControlProperties := TStringList.Create;
+  try
+    ListOfFindSubControlProperties.LineBreak := #13#10;
+    ListOfFindSubControlProperties.Text := StringReplace(ActionContentStr, '&', #13#10, [rfReplaceAll]);
+
+    MatchBitmapFilesStr := ListOfFindSubControlProperties.Values['MatchBitmapFiles'];
+
+    //rendered-only text bmps wil have the following name:  "ExtMem:\<ActionName>_<ProfileName>.bmp"
+
+    DecodingErr := SetFindSubControlActionProperties(ListOfFindSubControlProperties, nil, DecodedAction, ActionOptions);
+    if DecodingErr <> '' then
+      raise Exception.Create('--- Action decoding errror: ' + DecodingErr);
+
+    if DecodedAction.MatchBitmapAlgorithm = mbaRenderTextOnly then
+    begin
+      for i := 0 to Length(DecodedAction.MatchBitmapText) - 1 do
+      begin
+        ProfileName := DecodedAction.MatchBitmapText[i].ProfileName;
+        Fnm := 'ExtMem:\' + OtherBitmapsActionPropertyValue + '_' + ProfileName + '.bmp';
+
+        ApplyEffectOnBmp(APluginReference,
+                         AOnActionPlugin_GetAllowedFilesInfo,
+                         AOnActionPlugin_LoadBitmap,
+                         AOnActionPlugin_SetBitmap,
+                         AListOfAllVars,
+                         bflMem,
+                         Fnm);
+      end;
+    end; //txt
+
+    if MatchBitmapFilesStr <> '' then
+    begin
+      ListOfMatchBitmapFiles := TStringList.Create;
+      try
+        ListOfMatchBitmapFiles.LineBreak := #13#10;
+        ListOfMatchBitmapFiles.Text := MatchBitmapFilesStr; //FastReplace_45ToReturn is already applied
+
+        for i := 0 to ListOfMatchBitmapFiles.Count - 1 do
+        begin
+          Fnm := ListOfMatchBitmapFiles.Strings[i];
+          if FileExists(Fnm) then  //This is disk only. If UIClicker is running in server mode, these bmp file will be in the main In-Mem FS, so FileExists is not the right check.
+          begin
+            ApplyEffectOnBmp(APluginReference,
+                             AOnActionPlugin_GetAllowedFilesInfo,
+                             AOnActionPlugin_LoadBitmap,
+                             AOnActionPlugin_SetBitmap,
+                             AListOfAllVars,
+                             bflDiskToMem,   //a similar problem with FileExists above
+                             Fnm);
+          end;
+        end;
+      finally
+        ListOfMatchBitmapFiles.Free;
+      end;
+    end;
+  finally
+    FreeAndNil(ListOfFindSubControlProperties);
+  end;
+end;
+
+
 function ExecutePlugin(APluginReference: Pointer;
                        AListOfPluginSettings: Pointer;
                        AListOfPluginSettingsLen: PDWord;
@@ -350,8 +621,7 @@ var
   end;
 
 var
-  i, DiffCount, idx1, idx2: Integer;
-  s1, s2, Instr: string;
+  i: Integer;
 begin
   Result := True;
   try
@@ -420,7 +690,7 @@ begin
           Exit;
         end;
 
-        //if IndexOfOtherBitmapsActionProperty = -1 then
+        //if (IndexOfOtherBitmapsActionProperty = -1) then
         //begin
         //  SetTemplateVar(CActionPlugin_ExecutionResultErrorVar, 'OtherBitmaps action not configured.');
         //  Exit;
@@ -432,32 +702,31 @@ begin
       if TakeScreenshotForBackgroundPropertyValue = 'True' then
       begin
         AddToLog('Taking a screenshot, using setting from (' + ScreenshotSettingsActionPropertyValue + ') action...');
-        if not AOnActionPlugin_ExecuteAction(APluginReference, @ScreenshotSettingsActionPropertyValue[1]) then
+        if not AOnActionPlugin_Screenshot(APluginReference, @ScreenshotSettingsActionPropertyValue[1]) then
         begin
           SetTemplateVar(CActionPlugin_ExecutionResultErrorVar, 'The required "' + ScreenshotSettingsActionPropertyValue + '" action has failed on updating $Control_Left$ and $Control_Top$.');
           Exit;
         end;
       end;
 
-      //GetAllTemplateVars(AllVarsStr);
-      //ListOfAllVars.Text := AllVarsStr;
+      GetAllTemplateVars(AllVarsStr);
+      ListOfAllVars.Text := AllVarsStr;
 
-      //ToDo: call Blur4px(); or other effect
       if BackgroundFileNamePropertyValue <> '' then
-      begin
-        //Load bmp
-        //Blur4px
-        //save bmp
-      end;
+        ApplyEffectOnBackgroundBmp(APluginReference,
+                                   AOnActionPlugin_GetAllowedFilesInfo,
+                                   AOnActionPlugin_LoadBitmap,
+                                   AOnActionPlugin_SetBitmap,
+                                   ListOfAllVars);
 
       if OtherBitmapsActionPropertyValue <> '' then
-      begin
-        //get bmp filename from txt and bmp properties (no pmtv support)
-        //for through all files
-        //Load bmp
-        //Blur4px
-        //save bmp
-      end;
+        ApplyEffectOnOtherBmps(APluginReference,
+                               AOnActionPlugin_GetActionContentByIndex,
+                               AOnActionPlugin_GetAllowedFilesInfo,
+                               AOnActionPlugin_LoadBitmap,
+                               AOnActionPlugin_SetBitmap,
+                               ListOfAllVars,
+                               IndexOfOtherBitmapsActionProperty);
     finally
       ListOfAllVars.Free;
     end;
