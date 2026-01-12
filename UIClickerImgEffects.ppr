@@ -557,7 +557,10 @@ begin
   if BitmapIsAllowedToBeLoaded(APluginReference, AOnActionPlugin_GetAllowedFilesInfo, AFnm, TempDenyReason) then                                      //isflDisk=0, isflMem=1
     Result := AOnActionPlugin_LoadBitmap(APluginReference, @AFnm[1], ADestBmp, Ord(AFileLocation), @HandleOnFileContent)
   else
+  begin
+    AddToLog('Error: File is not allowed to be loaded from ' + AFnm);
     Result := False;
+  end;
 end;
 
 
@@ -590,9 +593,9 @@ var
   LoadingFileLocation: TImageSourceFileNameLocation;
 begin
   if AFileLocationValue = bflMem then
-    LoadingFileLocation := isflMem
+    LoadingFileLocation := isflMem       //isflMem means Ext In-Mem FS in plugins
   else
-    LoadingFileLocation := isflDisk;
+    LoadingFileLocation := isflDisk;     //isflDisk means disk or main In-Mem FS, depending on local/client/server mode
 
   SrcBmp := TBitmap.Create;
   DestBmp := TBitmap.Create;
@@ -609,7 +612,7 @@ begin
                                 LoadingFileLocation);
 
     if not LoadingResult then
-      raise Exception.Create('Can''t load background file, to apply effect on it.');
+      raise Exception.Create('Can''t load bitmap file, to apply effect on it. Is the file allowed to be loaded from ' + SrcFnm + ' ?');
 
     case ImageEffectPropertyValue of
       ieBlur4x:
@@ -630,12 +633,16 @@ begin
 
     if AFileLocationValue in [bflMem, bflDiskToMem] then
     begin
-      DestFnm := ExtractFilePath(SrcFnm) + ExtractFileNameNoExt(SrcFnm) + CEffectStr + ExtractFileExt(SrcFnm);
+      if AFileLocationValue = bflDiskToMem then  //This is a disk path, in ExtMem. It should end up in MatchBitmapFiles property of a FindSubControl action. So it has to start with ExtMem:
+        DestFnm := CExtBmp_Prefix + PathDelim + ExtractFileNameNoExt(SrcFnm) + CEffectStr + ExtractFileExt(SrcFnm)
+      else
+        DestFnm := ExtractFilePath(SrcFnm) + ExtractFileNameNoExt(SrcFnm) + CEffectStr + ExtractFileExt(SrcFnm);
+
       AddToLog('DestFnm: ' + DestFnm);
       SaveBitmapToExtRenderingInMemFS(APluginReference, AOnActionPlugin_SetBitmap, DestBmp, DestFnm);
     end
     else
-      DestBmp.SaveToFile(DestFnm);
+      DestBmp.SaveToFile(DestFnm);  //bflDisk
   finally
     SrcBmp.Free;
     DestBmp.Free;
@@ -677,6 +684,7 @@ var
   ActionOptions: TClkActionOptions;
   i: Integer;
   ProfileName, Fnm: string;
+  BmpFileLoc: TBackgroundFileLocation;
 begin
   //get bmp filename from txt and bmp properties (no pmtv support):
 
@@ -703,7 +711,7 @@ begin
       for i := 0 to Length(DecodedAction.MatchBitmapText) - 1 do
       begin
         ProfileName := DecodedAction.MatchBitmapText[i].ProfileName;
-        Fnm := 'ExtMem:\' + OtherBitmapsActionPropertyValue + '_' + ProfileName + '.bmp';
+        Fnm := CExtBmp_Prefix + PathDelim + OtherBitmapsActionPropertyValue + '_' + ProfileName + '.bmp';
 
         ApplyEffectOnBmp(APluginReference,
                          AOnActionPlugin_GetAllowedFilesInfo,
@@ -720,21 +728,24 @@ begin
       ListOfMatchBitmapFiles := TStringList.Create;
       try
         ListOfMatchBitmapFiles.LineBreak := #13#10;
-        ListOfMatchBitmapFiles.Text := MatchBitmapFilesStr; //FastReplace_45ToReturn is already applied
+        ListOfMatchBitmapFiles.Text := FastReplace_45ToReturn(MatchBitmapFilesStr);
 
+        AddToLog('Other files Count: ' + IntToStr(ListOfMatchBitmapFiles.Count));
         for i := 0 to ListOfMatchBitmapFiles.Count - 1 do
         begin
-          Fnm := ListOfMatchBitmapFiles.Strings[i];
-          if FileExists(Fnm) then  //This is disk only. If UIClicker is running in server mode, these bmp file will be in the main In-Mem FS, so FileExists is not the right check.
-          begin
-            ApplyEffectOnBmp(APluginReference,
-                             AOnActionPlugin_GetAllowedFilesInfo,
-                             AOnActionPlugin_LoadBitmap,
-                             AOnActionPlugin_SetBitmap,
-                             AListOfAllVars,
-                             bflDiskToMem,   //a similar problem with FileExists above
-                             Fnm);
-          end;
+          Fnm := ListOfMatchBitmapFiles.Strings[i];    //these files can come from disk or ExtMem
+          if Pos(CExtBmp_PrefixUpperCase, UpperCase(Fnm)) = 1 then
+            BmpFileLoc := bflMem
+          else
+            BmpFileLoc := bflDiskToMem;
+
+          ApplyEffectOnBmp(APluginReference,
+                           AOnActionPlugin_GetAllowedFilesInfo,
+                           AOnActionPlugin_LoadBitmap,
+                           AOnActionPlugin_SetBitmap,
+                           AListOfAllVars,
+                           BmpFileLoc,
+                           Fnm);
         end;
       finally
         ListOfMatchBitmapFiles.Free;
