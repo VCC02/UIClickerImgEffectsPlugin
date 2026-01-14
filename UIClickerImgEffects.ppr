@@ -28,9 +28,9 @@ library UIClickerImgEffects;
 
 uses
   LCLIntf, LCLType, Interfaces, Classes, SysUtils, Graphics, ImgEffectsDM, ImgList,
-  ClickerActionPlugins, ClickerUtils, DllUtils, ClickerFileProviderUtils,
+  ClickerActionPlugins, ClickerUtils, DllUtils,
   ImgEffectsPluginProperties, ClickerActionProperties,
-  BitmapProcessing, BitmapConv;
+  BitmapProcessing, BitmapConv, ClickerActionPluginAccess;
 
 
 var
@@ -63,36 +63,13 @@ procedure GetListOfProperties(APluginReference: Pointer;                 //UICli
                               AOnActionPlugin_UpdatePropertyIcons: TOnActionPlugin_UpdatePropertyIcons); cdecl;
 var
   Properties: string;
-  i: Integer;
-  TempMemStream: TMemoryStream;
-  Bmp: TBitmap;
 begin
   Properties := FillInPropertyDetails;
   AListOfPropertiesLen^ := SetPointedContentFromString(Properties, AListOfProperties);
 
   dmProperties := TdmProperties.Create(nil);
   try
-    for i := 0 to CPropertiesCount - 1 do
-    begin
-      TempMemStream := TMemoryStream.Create;
-      Bmp := TBitmap.Create;
-      try
-        Bmp.PixelFormat := pf24bit;
-        Bmp.Width := dmProperties.imglstProperties.Width;
-        Bmp.Height := dmProperties.imglstProperties.Height;
-        Bmp.Canvas.Pen.Color := clWhite;
-        Bmp.Canvas.Brush.Color := clWhite;
-        Bmp.Canvas.Rectangle(0, 0, Bmp.Width, Bmp.Height);
-
-        dmProperties.imglstProperties.Draw(Bmp.Canvas, 0, 0, i, dsNormal, itImage);
-        Bmp.SaveToStream(TempMemStream);
-
-        AOnActionPlugin_UpdatePropertyIcons(APluginReference, TempMemStream.Memory, TempMemStream.Size);
-      finally
-        TempMemStream.Free;
-        Bmp.Free;
-      end;
-    end;
+    UpdatePropertyIcons(APluginReference, AOnActionPlugin_UpdatePropertyIcons, dmProperties.imglstProperties, CPropertiesCount);
   finally
     dmProperties.Free;
   end;
@@ -488,101 +465,11 @@ begin
 end;
 
 
-function BitmapIsAllowedToBeLoaded(APluginReference: Pointer; AOnActionPlugin_GetAllowedFilesInfo: TOnActionPlugin_GetAllowedFilesInfo; AFnm: string; out ADenyReason: string): Boolean;
-var
-  TempFileProvider: TFileProvider;
-  FullTemplatesDir, AllowedFileDirsForServer, AllowedFileExtensionsForServer: string;
-  FullTemplatesDirPtr, AllowedFileDirsForServerPtr, AllowedFileExtensionsForServerPtr: Pointer;
-begin
-  TempFileProvider := TFileProvider.Create;
-  try
-    SetLength(FullTemplatesDir, CMaxSharedStringLength + 1);
-    SetLength(AllowedFileDirsForServer, CMaxSharedStringLength + 1);
-    SetLength(AllowedFileExtensionsForServer, CMaxSharedStringLength + 1);
-
-    FullTemplatesDirPtr := @FullTemplatesDir[1];
-    AllowedFileDirsForServerPtr := @AllowedFileDirsForServer[1];
-    AllowedFileExtensionsForServerPtr := @AllowedFileExtensionsForServer[1];
-
-    AOnActionPlugin_GetAllowedFilesInfo(APluginReference, FullTemplatesDirPtr, AllowedFileDirsForServerPtr, AllowedFileExtensionsForServerPtr);
-    FullTemplatesDir := Copy(FullTemplatesDir, 1, Pos(#0, FullTemplatesDir) - 1);
-    AllowedFileDirsForServer := Copy(AllowedFileDirsForServer, 1, Pos(#0, AllowedFileDirsForServer) - 1);
-    AllowedFileExtensionsForServer := Copy(AllowedFileExtensionsForServer, 1, Pos(#0, AllowedFileExtensionsForServer) - 1);
-
-    TempFileProvider.FullTemplatesDir := FullTemplatesDir;
-
-    TempFileProvider.AddListOfAccessibleDirs(AllowedFileDirsForServer);
-    TempFileProvider.AddListOfAccessibleFileExtensions(AllowedFileExtensionsForServer);
-
-    Result := TempFileProvider.FileIsAllowed(AFnm, ADenyReason);
-  finally
-    TempFileProvider.Free;
-  end;
-end;
-
-
-procedure HandleOnFileContent(ACallReference, AStreamContent: Pointer; AStreamSize: Int64); cdecl;
-var
-  TempStream: TMemoryStream;
-  DestBmp: TBitmap;
-begin
-  if AStreamSize <= 0 then
-    Exit;
-
-  DestBmp := TBitmap(ACallReference); //created by caller
-
-  TempStream := TMemoryStream.Create;
-  try
-    TempStream.SetSize(AStreamSize);
-    Move(AStreamContent^, TempStream.Memory^, AStreamSize);
-    DestBmp.LoadFromStream(TempStream, AStreamSize);
-  finally
-    TempStream.Free;
-  end;
-end;
-
-
-function LoadBitmap(APluginReference: Pointer;
-                    AOnActionPlugin_GetAllowedFilesInfo: TOnActionPlugin_GetAllowedFilesInfo;
-                    AOnActionPlugin_LoadBitmap: TOnActionPlugin_LoadBitmap;
-                    AListOfAllVars: TStringList;
-                    var AFnm: string;
-                    ADestBmp: TBitmap;
-                    AFileLocation: TImageSourceFileNameLocation): Boolean;
-var
-  TempDenyReason: string;
-begin
-  AFnm := EvaluateAllReplacements(AListOfAllVars, AFnm);
-
-  if BitmapIsAllowedToBeLoaded(APluginReference, AOnActionPlugin_GetAllowedFilesInfo, AFnm, TempDenyReason) then                                      //isflDisk=0, isflMem=1
-    Result := AOnActionPlugin_LoadBitmap(APluginReference, @AFnm[1], ADestBmp, Ord(AFileLocation), @HandleOnFileContent)
-  else
-  begin
-    AddToLog('Error: File is not allowed to be loaded from ' + AFnm);
-    Result := False;
-  end;
-end;
-
-
-procedure SaveBitmapToExtRenderingInMemFS(APluginReference: Pointer; AOnActionPlugin_SetBitmap: TOnActionPlugin_SetBitmap; ABmp: TBitmap; AFnm: string);
-var
-  MemStream: TMemoryStream;
-begin
-  MemStream := TMemoryStream.Create;
-  try
-    ABmp.SaveToStream(MemStream);
-
-    AOnActionPlugin_SetBitmap(APluginReference, @AFnm[1], MemStream.Memory, MemStream.Size, ABmp.Width, ABmp.Height);
-  finally
-    MemStream.Free;
-  end;
-end;
-
-
 procedure ApplyEffectOnBmp(APluginReference: Pointer;
                            AOnActionPlugin_GetAllowedFilesInfo: TOnActionPlugin_GetAllowedFilesInfo;
                            AOnActionPlugin_LoadBitmap: TOnActionPlugin_LoadBitmap;
                            AOnActionPlugin_SetBitmap: TOnActionPlugin_SetBitmap;
+                           AOnActionPlugin_AddToLog: TOnActionPlugin_AddToLog;
                            AListOfAllVars: TStringList;
                            AFileLocationValue: TBackgroundFileLocation;
                            AFileName: string);
@@ -606,6 +493,7 @@ begin
     LoadingResult := LoadBitmap(APluginReference,
                                 AOnActionPlugin_GetAllowedFilesInfo,
                                 AOnActionPlugin_LoadBitmap,
+                                AOnActionPlugin_AddToLog,
                                 AListOfAllVars,
                                 SrcFnm,
                                 SrcBmp,
@@ -654,12 +542,14 @@ procedure ApplyEffectOnBackgroundBmp(APluginReference: Pointer;
                                      AOnActionPlugin_GetAllowedFilesInfo: TOnActionPlugin_GetAllowedFilesInfo;
                                      AOnActionPlugin_LoadBitmap: TOnActionPlugin_LoadBitmap;
                                      AOnActionPlugin_SetBitmap: TOnActionPlugin_SetBitmap;
+                                     AOnActionPlugin_AddToLog: TOnActionPlugin_AddToLog;
                                      AListOfAllVars: TStringList);
 begin
   ApplyEffectOnBmp(APluginReference,
                    AOnActionPlugin_GetAllowedFilesInfo,
                    AOnActionPlugin_LoadBitmap,
                    AOnActionPlugin_SetBitmap,
+                   AOnActionPlugin_AddToLog,
                    AListOfAllVars,
                    BackgroundFileLocationValue,
                    BackgroundFileNamePropertyValue);
@@ -671,6 +561,7 @@ procedure ApplyEffectOnOtherBmps(APluginReference: Pointer;
                                  AOnActionPlugin_GetAllowedFilesInfo: TOnActionPlugin_GetAllowedFilesInfo;
                                  AOnActionPlugin_LoadBitmap: TOnActionPlugin_LoadBitmap;
                                  AOnActionPlugin_SetBitmap: TOnActionPlugin_SetBitmap;
+                                 AOnActionPlugin_AddToLog: TOnActionPlugin_AddToLog;
                                  AListOfAllVars: TStringList;
                                  AIndexOfOtherBitmapsActionProperty: Integer);
 var
@@ -717,6 +608,7 @@ begin
                          AOnActionPlugin_GetAllowedFilesInfo,
                          AOnActionPlugin_LoadBitmap,
                          AOnActionPlugin_SetBitmap,
+                         AOnActionPlugin_AddToLog,
                          AListOfAllVars,
                          bflMem,
                          Fnm);
@@ -743,6 +635,7 @@ begin
                            AOnActionPlugin_GetAllowedFilesInfo,
                            AOnActionPlugin_LoadBitmap,
                            AOnActionPlugin_SetBitmap,
+                           AOnActionPlugin_AddToLog,
                            AListOfAllVars,
                            BmpFileLoc,
                            Fnm);
@@ -791,22 +684,6 @@ var
   procedure SetTemplateVar(AVarName, AVarValue: string);
   begin
     AOnActionPlugin_SetTemplateVar(APluginReference, @AVarName[1], @AVarValue[1]);
-  end;
-
-  procedure GetActionInfoByIndex(AIndex: Integer; out AActionName: string; var AActionType: DWord);
-  var
-    Buffer: string;
-    ActionNamePtr: Pointer;
-    NameLengthDWord: DWord;
-  begin
-    SetLength(Buffer, CMaxSharedStringLength + 1);
-    ActionNamePtr := @Buffer[1];
-    NameLengthDWord := 0;
-
-    AActionName := '';
-    AOnActionPlugin_GetActionInfoByIndex(APluginReference, AIndex, ActionNamePtr, @NameLengthDWord, @AActionType);
-    SetPointedContentToString(ActionNamePtr, AActionName);
-    SetLength(AActionName, NameLengthDWord);
   end;
 
   procedure GetAllTemplateVars(out AAllTemplateVars: string);  //AAllTemplateVars are encoded as CRLF separated key=value strings, ready to be used on a TStringlist
@@ -874,7 +751,7 @@ begin
         IndexOfOtherBitmapsActionProperty := -1;
         for i := 0 to ActionCount - 1 do
         begin
-          GetActionInfoByIndex(i, s, ActionTypeDWord);
+          GetActionInfoByIndex(APluginReference, AOnActionPlugin_GetActionInfoByIndex, i, s, ActionTypeDWord);
           AddToLog('Found action [' + IntToStr(i) + ']: ' + s);
 
           if ActionTypeDWord <> $FFFFFFFF then
@@ -930,6 +807,7 @@ begin
                                    AOnActionPlugin_GetAllowedFilesInfo,
                                    AOnActionPlugin_LoadBitmap,
                                    AOnActionPlugin_SetBitmap,
+                                   AOnActionPlugin_AddToLog,
                                    ListOfAllVars);
 
       if OtherBitmapsActionPropertyValue <> '' then
@@ -938,6 +816,7 @@ begin
                                AOnActionPlugin_GetAllowedFilesInfo,
                                AOnActionPlugin_LoadBitmap,
                                AOnActionPlugin_SetBitmap,
+                               AOnActionPlugin_AddToLog,
                                ListOfAllVars,
                                IndexOfOtherBitmapsActionProperty);
     finally
