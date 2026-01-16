@@ -83,6 +83,10 @@
         <Filename Value="..\UIClicker\ClickerUtils\ClickerActionPluginAccess.pas"/>
         <IsPartOfProject Value="True"/>
       </Unit>
+      <Unit>
+        <Filename Value="..\UIClicker\ClickerImageEffects.pas"/>
+        <IsPartOfProject Value="True"/>
+      </Unit>
     </Units>
   </ProjectOptions>
   <CompilerOptions>

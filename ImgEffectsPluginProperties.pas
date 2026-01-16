@@ -33,7 +33,6 @@ uses
 
 
 type
-  TImageEffect = (ieBlur4x, ieBlur8x, ieBlur_Reserved, ieGrayscale);
   TBackgroundFileLocation = (bflDisk, bflMem, bflDiskToMem);
 
 const
